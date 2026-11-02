@@ -26,6 +26,19 @@
   // 저장 데이터를 브라우저가 임의로 지우지 않게 요청 (폰에서 저장 유지)
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
 
+  // 이름 입력창(#gogo-ask)이 떠 있을 땐 게임보다 먼저 키를 받아서, 게임이 글자를 가로채지 않게 함
+  // (게임보다 먼저 등록해야 해서 로더보다 앞에 둠. 글자 입력 자체는 브라우저 기본 동작이라 그대로 됨)
+  ["keydown", "keypress", "keyup", "touchstart", "touchend", "mousedown", "mouseup", "pointerdown", "pointerup"].forEach(function (type) {
+    window.addEventListener(type, function (e) {
+      var t = e.target;
+      if (!t || !t.closest || !t.closest("#gogo-ask")) return;
+      e.stopImmediatePropagation();
+      if (type !== "keydown") return;
+      if (e.key === "Enter") { if (e.isComposing || e.keyCode === 229) { if (window.gogoAskEnterAfterIme) window.gogoAskEnterAfterIme(); } else if (window.gogoAskSubmit) window.gogoAskSubmit(); }
+      else if (e.key === "Escape" && window.gogoAskCancel) window.gogoAskCancel();
+    }, true);
+  });
+
   var canvas = document.getElementById("game");
   var isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
