@@ -187,9 +187,10 @@
   function gogoQuietAudioError(e) {
     var r = e && (e.reason || e.error || e.message);
     var s = String(r && (r.name || "") + " " + (r.message || r) || "");
-    if (!/EncodingError|Decoding failed|decodeAudioData/i.test(s)) return;
+    // 아이폰 사파리: 저장소(IndexedDB) 동기화가 한 번 실패하면 'dst.entries' 오류 경고창 → 그 한 번만 건너뜀 (다음 저장 때 다시 씀)
+    if (!/EncodingError|Decoding failed|decodeAudioData|dst\.entries|reconcile/i.test(s)) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    if (window.console) console.warn("[GOGO] 소리 하나를 못 풀어서 건너뜀:", s);
+    if (window.console) console.warn("[GOGO] 소리 하나 / 저장 동기화 한 번을 건너뜀:", s);
   }
   window.addEventListener("unhandledrejection", gogoQuietAudioError, true);
   window.addEventListener("error", gogoQuietAudioError, true);
@@ -264,11 +265,14 @@
   })();
 
   var buildUrl = "Build";
+  // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
+  var gogoV = "?v=202611031719";
   var config = {
-    dataUrl: buildUrl + "/Web.data.unityweb",
-    frameworkUrl: buildUrl + "/Web.framework.js.unityweb",
-    codeUrl: buildUrl + "/Web.wasm.unityweb",
+    dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
+    frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
+    codeUrl: buildUrl + "/Web.wasm.unityweb" + gogoV,
     streamingAssetsUrl: "StreamingAssets",
+    autoSyncPersistentDataPath: true,   // 저장 파일은 바뀔 때 유니티가 알아서 IndexedDB 로 (아이폰 'dst.entries' 동기화 오류 줄이기)
     companyName: "DefaultCompany",
     productName: "GOGO",
     productVersion: "0.1.0",
@@ -277,7 +281,7 @@
   };
 
   var script = document.createElement("script");
-  script.src = buildUrl + "/Web.loader.js";
+  script.src = buildUrl + "/Web.loader.js" + gogoV;
   // 폰은 PC용 텍스처(DXT)를 못 읽어서 풀어서 올림 → 메모리·발열. 폰용 ASTC 데이터가 있으면 그걸 받음 (GOGO → 웹 빌드 (폰 텍스처 포함))
   var astcUrl = config.dataUrl.replace(/\.data/, ".astc.data");
   function phoneAstc() {
