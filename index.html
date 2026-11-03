@@ -183,7 +183,7 @@
   });
 
   var canvas = document.getElementById("game");
-  var isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  var isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));   // 아이패드는 맥처럼 보여서 터치로 확인
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   // 폰: 첫 터치에 전체화면 시도 (세로 기본, 가로도 됨. 안 되는 브라우저는 그냥 넘어감)
@@ -261,12 +261,27 @@
     productName: "GOGO",
     productVersion: "0.1.0",
     matchWebGLToCanvasSize: true,
-    devicePixelRatio: isPhone ? Math.min(window.devicePixelRatio || 1, 2) : (window.devicePixelRatio || 1),   // 폰 발열 줄이기
+    devicePixelRatio: isPhone ? Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(1800000 / Math.max(1, innerWidth * innerHeight)))) : (/[?&]hd=1/.test(location.search) ? (window.devicePixelRatio || 1) : Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3686400 / Math.max(1, innerWidth * innerHeight))))),   // 폰 발열 줄이기 (폰은 배율 2, 태블릿은 약 180만 픽셀까지) · PC는 배율 2·약 370만 픽셀까지 (노트북 발열, ?hd=1 이면 원래대로)
   };
 
   var script = document.createElement("script");
   script.src = buildUrl + "/Web.loader.js";
+  // 폰은 PC용 텍스처(DXT)를 못 읽어서 풀어서 올림 → 메모리·발열. 폰용 ASTC 데이터가 있으면 그걸 받음 (GOGO → 웹 빌드 (폰 텍스처 포함))
+  var astcUrl = config.dataUrl.replace(/\.data/, ".astc.data");
+  function phoneAstc() {
+    try {
+      var c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl");
+      var ok = !!(gl && gl.getExtension("WEBGL_compressed_texture_astc"));
+      var lose = gl && gl.getExtension("WEBGL_lose_context"); if (lose) lose.loseContext();
+      return ok;
+    } catch (e) { return false; }
+  }
   script.onload = function () {
+    if (isPhone && phoneAstc()) {
+      fetch(astcUrl, { method: "HEAD", cache: "no-store" }).then(function (r) { if (r.ok) config.dataUrl = astcUrl; }).catch(function () {}).then(boot);
+    } else boot();
+  };
+  function boot() {
     createUnityInstance(canvas, config, function (p) {
       gogoLoad.progress(p);
     }).then(function (instance) {
