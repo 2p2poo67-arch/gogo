@@ -258,7 +258,7 @@
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611041732";
+  var gogoV = "?v=202611041747";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -289,11 +289,60 @@
       fetch(astcUrl, { method: "HEAD", cache: "no-store" }).then(function (r) { if (r.ok) config.dataUrl = astcUrl; }).catch(function () {}).then(boot);
     } else boot();
   };
-  function boot() {
+  // OPTIM-LOAD 11-04 로딩 빠르게: GitHub Pages 는 압축 헤더를 못 붙여서, 예전엔 유니티가 JS 로 brotli 를 풀었음
+  // (폰 기준 약 35초). 이제 빌드는 gzip 이고, 브라우저에 들어 있는 압축 풀기(DecompressionStream)로 풂 (폰 기준 약 5초).
+  // 안 되는 옛 브라우저는 예전처럼 유니티가 직접 풂. ?slowload=1 이면 예전 방식으로 시험.
+  var gogoPre = 0, gogoBlobs = [];
+  // 유니티 캐시 청소: 빌드마다 주소(?v=)가 바뀌는데 버전 이름(0.1.0)은 같아서, 옛 데이터(한 번에 약 70MB)가 1GB 찰 때까지 안 지워졌음
+  // → 폰 저장 공간이 차서 섬 저장이 실패할 수 있음. 지금 번호가 아닌 것만 지움 (섬 저장(/idbfs)은 다른 곳이라 안 건드림)
+  function gogoPurgeCache() {
+    try {
+      if (!window.caches) return;
+      var cur = gogoV.replace("?", "");
+      caches.open("UnityCache_" + config.companyName + "_" + config.productName).then(function (c) {
+        return c.keys().then(function (ks) {
+          var n = 0;
+          ks.forEach(function (rq) { if (rq.url.indexOf(cur) < 0) { n++; c.delete(rq); } });
+          if (n) console.log("[GOGO] 옛 게임 파일 " + n + "개 지움");
+        });
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function gogoFast(next) {
+    gogoPurgeCache();
+    if (!window.DecompressionStream || !window.ReadableStream || !window.Response || /[?&]slowload=1/.test(location.search)) return next();
+    var list = [["codeUrl", "application/wasm"], ["frameworkUrl", "text/javascript"], ["dataUrl", "application/octet-stream"]];
+    var guess = [20e6, 1.2e5, 76e6], tot = [0, 0, 0], got = [0, 0, 0];
+    function show() { var T = tot[0] + tot[1] + tot[2]; if (T > 0) gogoLoad.progress(0.75 * Math.min(1, (got[0] + got[1] + got[2]) / T)); }
+    Promise.all(list.map(function (it, i) {
+      return fetch(config[it[0]]).then(function (r) {
+        if (!r.ok || !r.body) throw new Error("http " + r.status);
+        tot[i] = +r.headers.get("Content-Length") || guess[i];
+        var rd = r.body.getReader(), first = true;
+        var counted = new ReadableStream({
+          pull: function (ctl) {
+            return rd.read().then(function (x) {
+              if (x.done) { ctl.close(); return; }
+              if (first) { first = false; if (x.value.length < 2 || x.value[0] !== 0x1f || x.value[1] !== 0x8b) throw new Error("gzip 아님"); }
+              got[i] += x.value.length; show(); ctl.enqueue(x.value);
+            });
+          }
+        });
+        return new Response(counted.pipeThrough(new DecompressionStream("gzip")), { headers: { "Content-Type": it[1] } }).blob();
+      }).then(function (b) { return URL.createObjectURL(b); });
+    })).then(function (urls) {
+      urls.forEach(function (u, i) { config[list[i][0]] = u; gogoBlobs.push(u); });
+      gogoPre = 0.75; next();
+    }).catch(function (e) { console.warn("[GOGO] 빠른 받기 실패 → 예전 방식", e); gogoPre = 0; next(); });
+  }
+  function gogoFastFree() { gogoBlobs.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); gogoBlobs = []; }
+  function boot() { gogoFast(boot2); }
+  function boot2() {
     createUnityInstance(canvas, config, function (p) {
-      gogoLoad.progress(p);
+      gogoLoad.progress(gogoPre + p * (1 - gogoPre));
     }).then(function (instance) {
       window.gogoInstance = instance;
+      gogoFastFree();
       gogoLoad.progress(1);
       gogoLoad.done();
     }).catch(function (e) {
