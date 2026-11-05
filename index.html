@@ -273,7 +273,7 @@
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611051722";
+  var gogoV = "?v=202611051753";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -363,9 +363,21 @@
       return ok;
     } catch (e) { return false; }
   }
+  // SPLITDATA 11-06: GitHub 은 한 파일 100MB 까지라 폰용 데이터가 크면 .part0 .part1 … 로 나뉘어 올라감 (WebBuildPhone)
+  //  → 조각을 다 받아 이어 붙여 풂 (빠른 받기만 가능). 빠른 받기가 안 되는 옛 브라우저는 PC용 데이터를 그대로 받음
+  var gogoParts = 0, gogoDxtUrl = config.dataUrl;
+  function gogoPartUrl(u, k) { var q = u.indexOf("?"); return q < 0 ? u + ".part" + k : u.slice(0, q) + ".part" + k + u.slice(q); }
+  function gogoCanFast() { return !!(window.DecompressionStream && window.ReadableStream && window.Response) && !/[?&]slowload=1/.test(location.search); }
+  function gogoCountParts(u, k) {
+    return fetch(gogoPartUrl(u, k), { method: "HEAD", cache: "no-store" }).then(function (r) { return r.ok && k < 8 ? gogoCountParts(u, k + 1) : k; }).catch(function () { return k; });
+  }
   script.onload = function () {
     if (isPhone && phoneAstc()) {
-      fetch(astcUrl, { method: "HEAD", cache: "no-store" }).then(function (r) { if (r.ok) config.dataUrl = astcUrl; }).catch(function () {}).then(boot);
+      fetch(astcUrl, { method: "HEAD", cache: "no-store" }).then(function (r) {
+        if (r.ok) { config.dataUrl = astcUrl; return; }
+        if (!gogoCanFast()) return;
+        return gogoCountParts(astcUrl, 0).then(function (n) { if (n >= 2) { gogoParts = n; config.dataUrl = astcUrl; } });
+      }).catch(function () {}).then(boot);
     } else boot();
   };
   // OPTIM-LOAD 11-04 로딩 빠르게: GitHub Pages 는 압축 헤더를 못 붙여서, 예전엔 유니티가 JS 로 brotli 를 풀었음
@@ -389,15 +401,31 @@
   }
   function gogoFast(next) {
     gogoPurgeCache();
-    if (!window.DecompressionStream || !window.ReadableStream || !window.Response || /[?&]slowload=1/.test(location.search)) return next();
+    if (!gogoCanFast()) return next();
     var list = [["codeUrl", "application/wasm"], ["frameworkUrl", "text/javascript"], ["dataUrl", "application/octet-stream"]];
     var guess = [20e6, 1.2e5, 76e6], tot = [0, 0, 0], got = [0, 0, 0];
     function show() { var T = tot[0] + tot[1] + tot[2]; if (T > 0) gogoLoad.progress(0.75 * Math.min(1, (got[0] + got[1] + got[2]) / T)); }
+    // 한 파일이면 그대로, 조각(SPLITDATA)이면 조각을 한꺼번에 받기 시작해서 순서대로 이어 읽음
+    function gogoOpen(i) {
+      var u = config[list[i][0]];
+      var urls = i === 2 && gogoParts >= 2 ? Array.apply(null, Array(gogoParts)).map(function (_, k) { return gogoPartUrl(u, k); }) : [u];
+      return Promise.all(urls.map(function (pu) { return fetch(pu); })).then(function (rs) {
+        var len = 0;
+        rs.forEach(function (r) { if (!r.ok || !r.body) throw new Error("http " + r.status); len += +r.headers.get("Content-Length") || 0; });
+        var k = 0, cur = rs[0].body.getReader();
+        var rd = { read: function () {
+          return cur.read().then(function (x) {
+            if (!x.done || k >= rs.length - 1) return x;
+            k++; cur = rs[k].body.getReader(); return rd.read();
+          });
+        } };
+        return { len: len, rd: rd };
+      });
+    }
     Promise.all(list.map(function (it, i) {
-      return fetch(config[it[0]]).then(function (r) {
-        if (!r.ok || !r.body) throw new Error("http " + r.status);
-        tot[i] = +r.headers.get("Content-Length") || guess[i];
-        var rd = r.body.getReader(), first = true;
+      return gogoOpen(i).then(function (o) {
+        tot[i] = o.len || guess[i];
+        var rd = o.rd, first = true;
         var counted = new ReadableStream({
           pull: function (ctl) {
             return rd.read().then(function (x) {
@@ -412,7 +440,11 @@
     })).then(function (urls) {
       urls.forEach(function (u, i) { config[list[i][0]] = u; gogoBlobs.push(u); });
       gogoPre = 0.75; next();
-    }).catch(function (e) { console.warn("[GOGO] 빠른 받기 실패 → 예전 방식", e); gogoPre = 0; next(); });
+    }).catch(function (e) {
+      console.warn("[GOGO] 빠른 받기 실패 → 예전 방식", e); gogoPre = 0;
+      if (gogoParts) { gogoParts = 0; config.dataUrl = gogoDxtUrl; }   // SPLITDATA 조각은 예전 방식으로 못 받음 → PC용 데이터
+      next();
+    });
   }
   function gogoFastFree() { gogoBlobs.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); gogoBlobs = []; }
   function boot() { gogoFast(boot2); }
