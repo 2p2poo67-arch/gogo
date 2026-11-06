@@ -266,7 +266,7 @@
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611061111";
+  var gogoV = "?v=202611061244";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -277,7 +277,7 @@
     productName: "GOGO",
     productVersion: "0.1.0",
     matchWebGLToCanvasSize: true,
-    devicePixelRatio: isPhone ? Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(1800000 / Math.max(1, innerWidth * innerHeight)))) : (/[?&]hd=1/.test(location.search) ? (window.devicePixelRatio || 1) : Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3686400 / Math.max(1, innerWidth * innerHeight))))),   // 폰 발열 줄이기 (폰은 배율 2, 태블릿은 약 180만 픽셀까지) · PC는 배율 2·약 370만 픽셀까지 (노트북 발열, ?hd=1 이면 원래대로)
+    devicePixelRatio: isPhone ? (function () { /* SHARPUI 11-06: 캔버스는 기기 배율 그대로(최대 3 · 320만 픽셀), 3D 무게는 GogoSharpK 로 예전과 같게 */ var d = window.devicePixelRatio || 1, a = Math.max(1, innerWidth * innerHeight); var o = Math.max(1, Math.min(d, 2, Math.sqrt(1800000 / a))); if (/[?&]dpr2=1/.test(location.search)) { window.gogoSharpK = 1; return o; } var n = Math.max(o, Math.min(d, 3, Math.sqrt(3200000 / a))); window.gogoSharpK = o / n; return n; })() : (/[?&]hd=1/.test(location.search) ? (window.devicePixelRatio || 1) : Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3686400 / Math.max(1, innerWidth * innerHeight))))),   // 폰 발열 줄이기 (폰은 배율 2, 태블릿은 약 180만 픽셀까지) · PC는 배율 2·약 370만 픽셀까지 (노트북 발열, ?hd=1 이면 원래대로)
   };
 
   // ───── INAPPOUT 11-06 인스타 · 카톡 · 페북 같은 앱 안 브라우저 → 크롬 · 사파리로 열어 달라고 (받기 전에) ─────
