@@ -266,7 +266,7 @@
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611061036";
+  var gogoV = "?v=202611061111";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -287,6 +287,44 @@
   // 받기 기록 (gogo.load): 어느 앱 · 무엇을 골랐나 · 받기 시작 수 / 다 받은 수 / 실패 수 · 걸린 초 → 게임 안 플레이 기록(gogo_stat)이 읽어 감
   var gogoT0 = Date.now(), gogoApp = "", gogoPick = "";
   function gogoLS(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+
+  // ───── CRASHMARK 11-06 튕김 기록: 화면이 보이는 채로 게임이 꺼졌나(꺼짐) · 유니티만 멈췄나(멈춤) ─────
+  //  창을 숨기거나 닫으면 '깨끗하게 나감' 표시. 다음에 켤 때 표시가 없으면 = 보이는 채로 죽음 → gogo.die 에 한 줄.
+  //  유니티(IslandLifeStat)는 2초마다 gogo.liveu = "시각|화면" 을 적음. 그게 15초 넘게 안 오면 = 멈춤.
+  //  화면 · 저장 안 건드림. gogo_stat(die)이 읽어 감.
+  var gogoLive = (function () {
+    var K = "gogo.live", t0 = Date.now(), L = { t: t0, s: 0, st: "get", c: 0, fz: 0, vs: t0, v: gogoV.replace("?v=", ""), e: "" };
+    function kst(ms) { var d = new Date(ms + 9 * 3600000); function p(n) { return (n < 10 ? "0" : "") + n; } return p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()); }
+    function uT(U) { return +((U || "").split("|")[0]) || 0; }
+    function stale(P, U, now) { var ut = uT(U); return P.st === "game" && ut > 0 && now - Math.max(ut, P.vs || 0) > 15000; }
+    function note(kind, P, U) {
+      try {
+        var at = (U || "").split("|")[1] || "";
+        var e = kind + "@" + P.st + (at ? "/" + at : "") + " " + Math.round(P.s) + "s [v" + P.v + " " + kst(P.t) + " KST]" + (P.e ? " " + P.e : "");
+        var a = []; try { a = JSON.parse(gogoLS("gogo.die") || "[]") || []; } catch (x) { a = []; }
+        a.push(e.slice(0, 140)); while (a.length > 6) a.shift();
+        gogoLS("gogo.die", JSON.stringify(a));
+      } catch (x) {}
+    }
+    try {
+      var P = JSON.parse(gogoLS(K) || "null"), U0 = gogoLS("gogo.liveu") || "";
+      if (P && !P.c && !P.fz) note(stale(P, U0, P.t) ? "멈춤" : "꺼짐", P, U0);
+    } catch (x) {}
+    gogoLS("gogo.liveu", "");
+    function save() {
+      L.t = Date.now(); L.s = (L.t - t0) / 1000;
+      if (!L.c && !L.fz) { var U = gogoLS("gogo.liveu") || ""; if (stale(L, U, L.t)) { L.fz = 1; note("멈춤", L, U); } }
+      gogoLS(K, JSON.stringify(L));
+    }
+    function hide() { if (!L.c) { L.c = 1; save(); } }
+    function show() { L.c = 0; L.vs = Date.now(); save(); }
+    document.addEventListener("visibilitychange", function () { if (document.hidden) hide(); else show(); });
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", function (ev) { if (ev.persisted) show(); });
+    window.addEventListener("error", function (ev) { try { L.e = String(ev.message || "").slice(0, 50); } catch (x) {} });
+    setInterval(save, 2000); save();
+    return { st: function (s) { if (L.st !== s) { L.st = s; save(); } } };
+  })();
   function gogoLoadNote(extra) {
     try {
       var o = { app: gogoApp, pick: gogoPick, ph: isPhone ? 1 : 0, v: gogoV.replace("?v=", ""), tr: +(gogoLS("gogo.loadtry") || 0), ok: +(gogoLS("gogo.loadok") || 0), fail: +(gogoLS("gogo.loadfail") || 0) };
@@ -443,9 +481,9 @@
   function boot() { gogoFast(boot2); }
   function boot2() {
     createUnityInstance(canvas, config, function (p) {
-      gogoLoad.progress(gogoPre + p * (1 - gogoPre));
+      gogoLoad.progress(gogoPre + p * (1 - gogoPre)); gogoLive.st(p < 0.9 ? "load" : "start");   // CRASHMARK
     }).then(function (instance) {
-      window.gogoInstance = instance;
+      window.gogoInstance = instance; gogoLive.st("game");   // CRASHMARK
       gogoLS("gogo.loadok", String(+(gogoLS("gogo.loadok") || 0) + 1)); gogoLoadNote({ s: Math.round((Date.now() - gogoT0) / 1000) });   // INAPPOUT 받기 기록
       gogoFastFree();
       gogoLoad.progress(1);
