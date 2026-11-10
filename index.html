@@ -1,5 +1,11 @@
 <!DOCTYPE html>
 <html lang="ko">
+<!--
+  고고 다이노 (GOGO DINO)
+  © 2026 Clear :Box games. All rights reserved.
+  게임 코드 · 그림 · 3D 모델 · 캐릭터 · 이야기 · 음악의 저작권은 Clear :Box games 에 있습니다.
+  허락 없이 복제 · 수정 · 재배포 · 다른 곳에 올리기 · AI 학습에 쓰기를 금지합니다. (LICENSE.txt)
+-->
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -7,6 +13,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#2b2a4c">
 <title>고고 다이노</title>
+<meta name="author" content="Clear :Box games">
+<meta name="copyright" content="© 2026 Clear :Box games. All rights reserved.">
+<meta name="robots" content="noai, noimageai">
 <!-- OGMETA -->
 <meta name="description" content="알 줍고, 공룡 모으고, 나만의 공룡섬 꾸미기. 설치 없이 바로 플레이!">
 <meta property="og:type" content="website">
@@ -104,6 +113,7 @@
   #inapp .ia-stay { min-height: 44px; background: transparent; color: #9a7a5c; font-size: 15px; text-decoration: underline; }
   #inapp .ia-url { display: none; margin-top: 8px; padding: 8px; border-radius: 10px; background: #fff; font: 13px system-ui, sans-serif; color: #444;
     word-break: break-all; -webkit-user-select: all; user-select: all; }
+  #copy { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 11px; letter-spacing: .02em; color: rgba(255,255,255,.72); pointer-events: none; }   /* SECURE 저작권 */
 </style>
 <!-- GAMEPUSH 11-10: 홈 화면 앱(아이폰 알림에 꼭 필요) + 웹 푸시 알림 (OneSignal) -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -316,6 +326,7 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
   <div id="msg">공룡섬으로 가는 중<span class="d">.</span><span class="d">.</span><span class="d">.</span></div>
   <div id="bar"><div id="fill"></div></div>
   <div id="tip"></div>
+  <div id="copy">© 2026 Clear :Box games. All rights reserved.</div>
 </div>
 <script>
   // 저장 데이터를 브라우저가 임의로 지우지 않게 요청 (폰에서 저장 유지)
@@ -415,7 +426,7 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611101020";
+  var gogoV = "?v=202611101056";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
