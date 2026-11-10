@@ -105,6 +105,147 @@
   #inapp .ia-url { display: none; margin-top: 8px; padding: 8px; border-radius: 10px; background: #fff; font: 13px system-ui, sans-serif; color: #444;
     word-break: break-all; -webkit-user-select: all; user-select: all; }
 </style>
+<!-- GAMEPUSH 11-10: 홈 화면 앱(아이폰 알림에 꼭 필요) + 웹 푸시 알림 (OneSignal) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="고고 다이노">
+<script>
+/* GAMEPUSH: OneSignal 앱 ID. 비어 있으면 알림 기능은 통째로 꺼져요 (게임은 그대로) */
+window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
+(function () {
+  var P = window.gogoPush = { ready: false, err: "", pid: "", loading: false };
+  var ua = navigator.userAgent || "";
+  P.isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  P.standalone = navigator.standalone === true || !!(window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  P.inApp = /KAKAOTALK|Instagram|FBAN|FBAV|NAVER\(|Line\/|everytimeApp|DaumApps/i.test(ua);
+  P.can = function () { return "Notification" in window && "serviceWorker" in navigator && "PushManager" in window; };
+
+  // 게임이 묻는 지금 상태: off · unsupported · ios-browser · loading · default · denied · on · paused
+  P.state = function () {
+    if (!window.GOGO_PUSH_APP_ID) return "off";
+    if (P.inApp) return "unsupported";
+    if (P.isIOS && !P.standalone) return "ios-browser";
+    if (!P.can()) return "unsupported";
+    var perm = Notification.permission;
+    if (perm === "denied") return "denied";
+    if (perm === "default") return "default";
+    if (!P.ready) return P.err ? "unsupported" : "loading";
+    try { return OneSignal.User.PushSubscription.optedIn ? "on" : "paused"; } catch (e) { return "paused"; }
+  };
+
+  // OneSignal 은 게임 다운로드랑 안 겹치게 늦게, 그리고 알림을 허락한 사람만 불러옴
+  P.load = function () {
+    if (P.loading || !window.GOGO_PUSH_APP_ID || !P.can() || (P.isIOS && !P.standalone) || P.inApp) return;
+    P.loading = true;
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    var s = document.createElement("script");
+    s.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"; s.defer = true;
+    s.onerror = function () { P.err = "load"; };
+    document.head.appendChild(s);
+    OneSignalDeferred.push(async function (OneSignal) {
+      try {
+        var base = location.pathname.replace(/[^\/]*$/, "");   // 예: /gogo/
+        await OneSignal.init({
+          appId: window.GOGO_PUSH_APP_ID,
+          safari_web_id: "web.onesignal.auto.47d572d6-ef9d-4d9d-8962-815db43f4beb",
+          serviceWorkerPath: base.replace(/^\//, "") + "OneSignalSDKWorker.js",
+          serviceWorkerParam: { scope: base },
+          notifyButton: { enable: false },
+          welcomeNotification: { disable: true },
+          autoResubscribe: true
+        });
+        // 게임을 보고 있을 땐 알림을 띄우지 않음 (이미 화면에 보이니까)
+        OneSignal.Notifications.addEventListener("foregroundWillDisplay", function (e) {
+          if (document.visibilityState === "visible") { try { e.preventDefault(); } catch (x) {} }
+        });
+        P.ready = true;
+        if (P.wantOn) { try { await OneSignal.User.PushSubscription.optIn(); } catch (x) {} }
+        if (P.pid) { try { await OneSignal.login(P.pid); } catch (x) {} }
+      } catch (e) { P.err = String(e && e.message || e); }
+    });
+  };
+  P.login = function (pid) {
+    if (!pid || pid === P.pid) return;
+    P.pid = pid;
+    if (P.ready) { try { OneSignal.login(pid); } catch (e) {} }
+  };
+  P.set = function (on) {
+    if (!P.ready) { P.wantOn = !!on; if (on) P.load(); return; }
+    try { if (on) OneSignal.User.PushSubscription.optIn(); else OneSignal.User.PushSubscription.optOut(); } catch (e) {}
+  };
+  window.addEventListener("load", function () {
+    if (P.can() && Notification.permission === "granted") setTimeout(P.load, 12000);
+  });
+
+  // ── 티라 말투 동의 창 (진짜 손가락 누름이어야 사파리가 허락 창을 띄워 줘서 HTML 로 그림) ──
+  function ui(title, lines, buttons) {
+    var old = document.getElementById("gogo-push"); if (old) old.remove();
+    var wrap = document.createElement("div");
+    wrap.id = "gogo-push";
+    wrap.style.cssText = "position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(43,42,76,.45);font-family:system-ui,sans-serif";
+    var box = document.createElement("div");
+    box.style.cssText = "background:#fff8e6;border-radius:20px;padding:18px 20px 16px;width:min(88vw,420px);box-shadow:0 8px 30px rgba(0,0,0,.25);color:#40301f;border:3px solid #ffd9a8";
+    var tag = document.createElement("div");
+    tag.textContent = title;
+    tag.style.cssText = "display:inline-block;background:#ffd98a;border-radius:12px;padding:4px 12px;font-weight:800;font-size:15px;margin-bottom:10px";
+    box.appendChild(tag);
+    lines.forEach(function (t, i) {
+      var p = document.createElement("div");
+      p.textContent = t;
+      p.style.cssText = i === 0 ? "font-size:17px;font-weight:700;line-height:1.45;margin-bottom:8px" : "font-size:14px;line-height:1.5;opacity:.8;margin-top:3px";
+      box.appendChild(p);
+    });
+    var row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap";
+    function close() { wrap.remove(); var c = document.querySelector("canvas"); if (c) c.focus(); }
+    buttons.forEach(function (b) {
+      var el = document.createElement("button");
+      el.textContent = b[0];
+      el.style.cssText = "font-size:16px;font-weight:800;padding:11px 18px;min-height:46px;border:0;border-radius:14px;cursor:pointer;color:#40301f;background:" + b[1];
+      el.onclick = function () { close(); b[2](); };
+      row.appendChild(el);
+    });
+    box.appendChild(row); wrap.appendChild(box); document.body.appendChild(wrap);
+  }
+  function send(go, v) { try { window.gogoInstance.SendMessage(go, "OnPushAnswer", v); } catch (e) {} }
+  var PINK = "#ffc8d6", CREAM = "#efe6d2", SUN = "#ffd98a";
+
+  // mode: default(알림 허락 묻기) · ios-browser(홈 화면 추가 안내) · ios-app(홈 화면 앱 첫 실행: 사파리 섬 불러오기 안내)
+  P.ask = function (go, mode, id) {
+    if (mode === "ios-browser") {
+      var l = ["아이폰은 고고 다이노를 홈 화면에 추가하면 티라가 알림을 보낼 수 있어!",
+               "1. 사파리 아래쪽 공유 버튼 (네모에 화살표)을 눌러",
+               "2. 「홈 화면에 추가」를 누르고 「추가」",
+               "3. 홈 화면에 생긴 고고 다이노로 들어와!"];
+      if (id) l.push("홈 화면 앱은 사파리랑 저장이 따로라서, 들어가면 설정 → 클라우드에서 아이디 「" + id + "」로 로그인해 줘. 지금 섬 그대로 나와!");
+      else l.push("홈 화면 앱은 사파리랑 저장이 따로라서, 먼저 아이디를 만들어 두면 섬을 그대로 가져갈 수 있어.");
+      var b = [["알겠어", SUN, function () { send(go, "later"); }]];
+      if (!id) b.unshift(["아이디 만들기", PINK, function () { send(go, "openid"); }]);
+      ui("티라의 알림", l, b);
+      return;
+    }
+    if (mode === "ios-app") {
+      ui("어서 와!", ["사파리에서 키우던 섬이 있어?",
+                      "있으면 아이디로 로그인해서 그 섬을 불러와. 지금 이 섬은 따로 백업해 둘게."],
+         [["새로 할래", CREAM, function () { send(go, "later"); }], ["로그인하기", PINK, function () { send(go, "openid"); }]]);
+      return;
+    }
+    ui("티라의 알림", ["알이 톡 깨어나거나 섬 공사가 끝나면 티라가 알려줄까?",
+                      "밤 9시부터 아침 8시까지는 조용히 있을게.",
+                      "이름 · 전화번호 · 이메일은 안 받아. 설정에서 언제든 끌 수 있어."],
+       [["괜찮아", CREAM, function () { send(go, "later"); }],
+        ["알려줘!", PINK, function () {
+          // 이 누름 안에서 바로 브라우저 허락 창을 띄움 (사파리 규칙)
+          try {
+            var r = Notification.requestPermission(function (v) { done(v); });
+            if (r && r.then) r.then(done, function () { done("default"); });
+          } catch (e) { done("default"); }
+          var fired = false;
+          function done(v) { if (fired) return; fired = true; if (v === "granted") { P.load(); P.set(true); } send(go, v || "default"); }
+        }]]);
+  };
+})();
+</script>
 </head>
 <body>
 <canvas id="game" tabindex="-1"></canvas>
@@ -206,6 +347,14 @@
   window.addEventListener("unhandledrejection", gogoQuietAudioError, true);
   window.addEventListener("error", gogoQuietAudioError, true);
 
+  /* PHONEPERF 11-10: 유니티 한 장 계산 시간 재기 (화면 그리기 콜백이 걸린 ms, 3초 평균). 게임 안 gogo_stat cpuMs 로 감. 값만 잼, 동작은 그대로 */
+  (function () {
+    var W = window, P = W.performance; if (!P || !P.now || W.gogoCpu) return;
+    var M = W.gogoCpu = { ms: 0, fps: 0, a: 0, n: 0, t0: P.now() };
+    function wrap(fn) { return function () { var t = P.now(); try { return fn.apply(this, arguments); } finally { var e = P.now(), d = e - t; if (d >= 1) { M.a += d; M.n++; } if (e - M.t0 >= 3000) { if (M.n) { M.ms = Math.round(M.a / M.n * 10) / 10; M.fps = Math.round(M.n / ((e - M.t0) / 1000) * 10) / 10; } M.a = 0; M.n = 0; M.t0 = e; } } }; }
+    var raf = W.requestAnimationFrame; if (raf) W.requestAnimationFrame = function (cb) { return raf.call(W, typeof cb === "function" ? wrap(cb) : cb); };
+    var st = W.setTimeout; W.setTimeout = function (cb) { var a = Array.prototype.slice.call(arguments); if (typeof cb === "function") a[0] = wrap(cb); return st.apply(W, a); };
+  })();
   var canvas = document.getElementById("game");
   var isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) || (navigator.maxTouchPoints > 0 && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches);   /* FITPHONES 폴드·태블릿 */   // 아이패드는 맥처럼 보여서 터치로 확인
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
@@ -266,7 +415,7 @@
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611100813";
+  var gogoV = "?v=202611101020";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,

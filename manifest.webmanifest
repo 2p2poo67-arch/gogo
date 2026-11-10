@@ -1,0 +1,16 @@
+{
+  "name": "고고 다이노",
+  "short_name": "고고 다이노",
+  "description": "알 줍고, 공룡 모으고, 나만의 공룡섬 꾸미기",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffecd6",
+  "theme_color": "#2b2a4c",
+  "lang": "ko",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
