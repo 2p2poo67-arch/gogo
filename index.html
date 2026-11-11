@@ -426,7 +426,7 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611111038";
+  var gogoV = "?v=202611111108";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -570,6 +570,12 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
         if (r.ok) { config.dataUrl = astcUrl; return; }
         if (!gogoCanFast()) return;
         return gogoCountParts(astcUrl, 0).then(function (n) { if (n >= 2) { gogoParts = n; config.dataUrl = astcUrl; } });
+      }).catch(function () {}).then(boot);
+    } else if (gogoCanFast()) {
+      // SPLITPC 11-11: PC용 데이터도 100MB 넘으면 .part0 .part1 … 로 나뉨 → 통파일이 없으면 조각을 이어 받음
+      fetch(config.dataUrl, { method: "HEAD", cache: "no-store" }).then(function (r) {
+        if (r.ok) return;
+        return gogoCountParts(config.dataUrl, 0).then(function (n) { if (n >= 2) gogoParts = n; });
       }).catch(function () {}).then(boot);
     } else boot();
   };
