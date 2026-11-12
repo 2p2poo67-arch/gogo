@@ -426,7 +426,7 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
 
   var buildUrl = "Build";
   // 빌드마다 바뀌는 번호 (WebBuild.cs 가 채움): 업데이트 직후 옛 파일과 새 파일이 섞여 받아지지 않게
-  var gogoV = "?v=202611121205";
+  var gogoV = "?v=202611121241";
   var config = {
     dataUrl: buildUrl + "/Web.data.unityweb" + gogoV,
     frameworkUrl: buildUrl + "/Web.framework.js.unityweb" + gogoV,
@@ -646,12 +646,26 @@ window.GOGO_PUSH_APP_ID = "36bc7f3e-119d-417a-aa59-857940358560";
     });
   }
   function gogoFastFree() { gogoBlobs.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); gogoBlobs = []; }
-  function boot() { gogoFast(boot2); }
+  // LAZY2 11-12: '나중에 받기' 묶음 (StreamingAssets/gogolazy2). 처음 온 사람 = 게임 켜진 뒤 뒤에서, 전에 들어온 사람 = 게임 데이터와 같이 받고 시작
+  var gogoLazyKind = "dxt", gogoLazyP = null, gogoBack = +(gogoLS("gogo.loadok") || 0) > 0;
+  function gogoLazyFetch() {
+    if (gogoLazyP) return gogoLazyP;
+    var u = "StreamingAssets/gogolazy2/gogolazy2_" + gogoLazyKind + ".bundle" + gogoV, t = Date.now();
+    gogoLazyP = fetch(u).then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.blob(); })
+      .then(function (b) { window.gogoLazyUrl = URL.createObjectURL(b); console.log("[LAZY2] 나중 묶음 받음 " + gogoLazyKind + " " + (b.size / 1048576).toFixed(1) + "MB " + ((Date.now() - t) / 1000).toFixed(1) + "s"); })
+      .catch(function (e) { window.gogoLazyUrl = "fail"; console.warn("[LAZY2] 나중 묶음 못 받음", e); });
+    return gogoLazyP;
+  }
+  function boot() {
+    gogoLazyKind = config.dataUrl === astcUrl ? "astc" : "dxt";
+    if (gogoBack) Promise.all([gogoLazyFetch(), new Promise(function (ok) { gogoFast(ok); })]).then(boot2);
+    else gogoFast(boot2);
+  }
   function boot2() {
     createUnityInstance(canvas, config, function (p) {
       gogoLoad.progress(gogoPre + p * (1 - gogoPre)); gogoLive.st(p < 0.9 ? "load" : "start");   // CRASHMARK
     }).then(function (instance) {
-      window.gogoInstance = instance; gogoLive.st("game");   // CRASHMARK
+      window.gogoInstance = instance; gogoLazyFetch();   // LAZY2 (처음 온 사람은 여기서부터 뒤에서) gogoLive.st("game");   // CRASHMARK
       gogoLS("gogo.loadok", String(+(gogoLS("gogo.loadok") || 0) + 1)); gogoLoadNote({ s: Math.round((Date.now() - gogoT0) / 1000) });   // INAPPOUT 받기 기록
       gogoFastFree();
       gogoLoad.progress(1);
